@@ -141,6 +141,12 @@ namespace VoiceCraft_Mobile.Audio
                 var bytesRead = audioRecord.Read(waveBuffer.ByteBuffer, 0, waveBuffer.ByteBufferCount);
                 if(bytesRead > 0)
                 {
+                    if (bytesRead < waveBuffer.ByteBufferCount)
+                    {
+                        waveBuffer.ByteBufferCount = (bytesRead + 3) & ~3;
+                        Array.Clear(waveBuffer.ByteBuffer, bytesRead, waveBuffer.ByteBufferCount - bytesRead);
+                    }
+
                     DataAvailable?.Invoke(this, new WaveInEventArgs(waveBuffer.ByteBuffer, bytesRead));
                 }
             }
