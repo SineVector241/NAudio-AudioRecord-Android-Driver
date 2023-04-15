@@ -4,11 +4,10 @@ An implementation of WaveInEvent from NAudio to support Android Devices using Au
 ```cs
 using Android.Media;
 using NAudio.CoreAudioApi;
-using NAudio.Wave;
 using System;
 using System.Threading;
 
-namespace VoiceCraft_Mobile.Audio
+namespace NAudio.Wave
 {
     public class AudioRecorder : IWaveIn
     {
@@ -22,7 +21,6 @@ namespace VoiceCraft_Mobile.Audio
         #region Public Fields
         public WaveFormat WaveFormat { get; set; }
         public int BufferMilliseconds { get; set; }
-        public int NumberOfBuffers { get; set; }
         public AudioSource audioSource { get; set; }
         #endregion
 
@@ -36,13 +34,13 @@ namespace VoiceCraft_Mobile.Audio
             synchronizationContext = SynchronizationContext.Current;
             WaveFormat = new WaveFormat(8000, 16, 1);
             BufferMilliseconds = 100;
-            NumberOfBuffers = 3;
             captureState = CaptureState.Stopped;
             disposed = false;
             audioSource = AudioSource.Mic;
 
         }
         #endregion
+
         #region Private Methods
         private void OpenRecorder()
         {
@@ -58,7 +56,7 @@ namespace VoiceCraft_Mobile.Audio
                 {
                     8 => Encoding.Pcm8bit,
                     16 => Encoding.Pcm16bit,
-                    _ => throw new ArgumentException("Input wave provider must be 8-bit, 16-bit", nameof(WaveFormat))
+                    _ => throw new ArgumentException("Input wave provider must be 8-bit or 16-bit", nameof(WaveFormat))
                 };
             }
             else
@@ -92,7 +90,7 @@ namespace VoiceCraft_Mobile.Audio
             if (audioRecord != null)
             {
                 //Make sure that the recorder is stopped.
-                if (audioRecord.RecordingState == RecordState.Stopped)
+                if (audioRecord.RecordingState != RecordState.Stopped)
                     audioRecord.Stop();
 
                 //Release and dispose of everything.
@@ -123,10 +121,13 @@ namespace VoiceCraft_Mobile.Audio
         private void RecordingLogic()
         {
             //Initialize the wave buffer
-            int waveBufferSize = (audioRecord.BufferSizeInFrames + NumberOfBuffers - 1) / NumberOfBuffers * WaveFormat.BlockAlign;
-            waveBufferSize = (waveBufferSize + 3) & ~3;
-            WaveBuffer waveBuffer = new WaveBuffer(waveBufferSize);
-            waveBuffer.ByteBufferCount = waveBufferSize;
+            int bufferSize = BufferMilliseconds * WaveFormat.AverageBytesPerSecond / 1000;
+            if (bufferSize % WaveFormat.BlockAlign != 0)
+            {
+                bufferSize -= bufferSize % WaveFormat.BlockAlign;
+            }
+
+            WaveBuffer waveBuffer = new WaveBuffer(bufferSize);
             captureState = CaptureState.Capturing;
 
             //Run the record loop
@@ -138,15 +139,9 @@ namespace VoiceCraft_Mobile.Audio
                     continue;
                 }
 
-                var bytesRead = audioRecord.Read(waveBuffer.ByteBuffer, 0, waveBuffer.ByteBufferCount);
+                var bytesRead = audioRecord.Read(waveBuffer.ByteBuffer, 0, bufferSize);
                 if(bytesRead > 0)
                 {
-                    if (bytesRead < waveBuffer.ByteBufferCount)
-                    {
-                        waveBuffer.ByteBufferCount = (bytesRead + 3) & ~3;
-                        Array.Clear(waveBuffer.ByteBuffer, bytesRead, waveBuffer.ByteBufferCount - bytesRead);
-                    }
-
                     DataAvailable?.Invoke(this, new WaveInEventArgs(waveBuffer.ByteBuffer, bytesRead));
                 }
             }
